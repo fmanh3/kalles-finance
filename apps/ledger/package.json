@@ -1,0 +1,9 @@
+{
+  "name": "kalles-finance-ledger",
+  "version": "1.0.0",
+  "main": "src/ledger-service.ts",
+  "license": "ISC",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

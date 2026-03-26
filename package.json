@@ -1,0 +1,25 @@
+{
+  "name": "kalles-finance",
+  "version": "1.0.0",
+  "description": "## Overview This repository contains the Financial domain for Kalles Buss, focused on revenue generation, compliance, and automated accounting.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/pg": "^8.20.0",
+    "@types/uuid": "^10.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "knex": "^3.2.6",
+    "pg": "^8.20.0",
+    "uuid": "^13.0.0"
+  }
+}
