@@ -17,9 +17,11 @@
     "typescript": "^6.0.2"
   },
   "dependencies": {
+    "@google-cloud/pubsub": "^5.3.0",
     "dotenv": "^17.3.1",
     "knex": "^3.2.6",
     "pg": "^8.20.0",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
   }
 }
