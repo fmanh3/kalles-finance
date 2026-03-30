@@ -23,3 +23,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+packages/shared-schemas/src/*.js
+packages/shared-schemas/src/*.d.ts
+packages/shared-schemas/src/*.map
