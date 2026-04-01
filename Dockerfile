@@ -8,7 +8,7 @@ COPY .env ./
 # Install dependencies for the specific service
 WORKDIR /app/kalles-finance
 COPY kalles-finance/package*.json ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # Copy the entire monorepo so cross-repo relative imports work
 WORKDIR /app
