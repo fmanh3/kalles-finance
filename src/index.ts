@@ -1,7 +1,10 @@
-import { PubSubClient } from '../../kalles-traffic/src/infrastructure/messaging/pubsub-client';
+import { FinancePubSubClient } from './infrastructure/messaging/finance-pubsub-client';
 import { BillingEngine } from './domain/billing/billing-engine';
 import { BankGateway } from './domain/gateways/bank-gateway';
 import { LiquidityService } from './domain/ledger/liquidity-service';
+import { TreasuryAgent } from './domain/ledger/treasury-agent';
+import { ReportingAgent } from './domain/ledger/reporting-agent';
+import { ControllingAgent } from './domain/ledger/controlling-agent';
 import Knex from 'knex';
 import config from '../knexfile';
 import * as dotenv from 'dotenv';
@@ -14,16 +17,19 @@ async function start() {
   const billingEngine = new BillingEngine(db);
   const bankGateway = new BankGateway(db);
   const liquidityService = new LiquidityService(db);
-  const pubsub = new PubSubClient();
+  const treasuryAgent = new TreasuryAgent(db);
+  const reportingAgent = new ReportingAgent(db);
+  const controllingAgent = new ControllingAgent(db, process.env.TRAFFIC_SERVICE_URL || '');
 
-  // Start a minimal heartbeat server for Cloud Run health checks and CFO API
+  const pubsub = new FinancePubSubClient();
+
   const app = express();
   app.use(express.json());
   const port = process.env.PORT || 8080;
 
-  app.get('/', (req, res) => res.send('Kalles Finance Domain is live! 💰'));
-  
-  // CFO Vy: Likviditetsstatus
+  app.get('/', (req, res) => res.send('Kalles Finance Domain is live! 💰 (v8.0)'));
+  app.get('/health', (req, res) => res.send('OK'));
+
   app.get('/liquidity', async (req, res) => {
     try {
       const status = await liquidityService.getCurrentPosition();
@@ -34,12 +40,41 @@ async function start() {
     }
   });
 
-  // Simulator: Trigga inbetalning från Bankgirot (Yttre Ringen)
-  app.post('/simulate/bankgiro', async (req, res) => {
+  app.get('/planning/liquidity-forecast', async (req, res) => {
     try {
-      const { payments } = req.body; // Array av { amount, reference, paymentDate }
-      await bankGateway.processIncomingPayments(payments);
-      res.json({ message: 'Betalningar processade.' });
+      const targetDate = req.query.date ? new Date(req.query.date as string) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const forecast = await treasuryAgent.generateLiquidityForecast(targetDate);
+      res.json(forecast);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/accounting/close-month', async (req, res) => {
+    try {
+      const { period } = req.body;
+      const accrued = await reportingAgent.accrueUnbilledRevenue(period);
+      res.json({ message: 'Month-end accruals completed', accruedAmount: accrued });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/accounting/depreciate-assets', async (req, res) => {
+    try {
+      const { assetId, degradationPct } = req.body;
+      const amount = await reportingAgent.calculateDynamicDepreciation({ assetId, degradationPct });
+      res.json({ message: 'Dynamic depreciation recorded', amount });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/controlling/process-penalty', async (req, res) => {
+    try {
+      const { referenceId, amount } = req.body;
+      const result = await controllingAgent.processPenalty(referenceId, amount);
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -47,45 +82,17 @@ async function start() {
 
   app.listen(port, () => console.log(`[Finance] API & Heartbeat listening on port ${port}`));
 
-  console.log('--- KALLES FINANCE: CORE BILLING & LEDGER ---');
-  
-  const TOPIC_NAME = 'traffic-events'; 
-  const SUB_NAME = 'finance-billing-sub';
-  const APC_TOPIC = 'apc-events';
-  const APC_SUB_NAME = 'finance-apc-sub';
-
-  // Prenumerera på avslutade turer
-  await pubsub.subscribe(TOPIC_NAME, SUB_NAME, async (event) => {
+  // Invänta händelser från bussen
+  await pubsub.subscribe('traffic-events', 'finance-billing-sub', async (event) => {
     try {
       if (event.status === 'COMPLETED' && event.distanceKm) {
-        // Hämta passagerarstatistik för turen (i en riktig app skulle vi aggregera detta)
-        const stats = await db('tour_passenger_stats').where({ tour_id: event.tourId }).first();
-        const boardingCount = stats ? stats.total_boarding : 0;
-
         await billingEngine.processTourCompletion(
           { tourId: event.tourId, line: event.lineId, distanceKm: event.distanceKm },
-          { totalBoarding: boardingCount }
+          { totalBoarding: 0 }
         );
       }
     } catch (err) {
-      console.error('[Finance] Fel vid hantering av Billing-händelse:', err);
-    }
-  });
-
-  // Prenumerera på APC-händelser för att bygga underlag (som tidigare)
-  await pubsub.subscribe(APC_TOPIC, APC_SUB_NAME, async (event) => {
-    try {
-      if (event.boarding !== undefined) {
-        await db('tour_passenger_stats')
-          .insert({ tour_id: event.tourId, total_boarding: event.boarding, total_alighting: event.alighting })
-          .onConflict('tour_id')
-          .merge({
-            total_boarding: db.raw('tour_passenger_stats.total_boarding + ?', [event.boarding]),
-            total_alighting: db.raw('tour_passenger_stats.total_alighting + ?', [event.alighting])
-          });
-      }
-    } catch (err) {
-      console.error('[Finance] Fel vid uppdatering av APC-underlag:', err);
+      console.error('[Finance] Error handling billing event:', err);
     }
   });
 }
